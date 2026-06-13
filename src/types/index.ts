@@ -200,6 +200,7 @@ export interface BatchExportConfig {
   format: 'pdf' | 'png'
   dpi: number
   range: 'all' | 'current' | 'custom'
+  currentChapterId?: string
   customRange?: string
   includeViolations: boolean
   watermark?: string

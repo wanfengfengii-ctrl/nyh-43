@@ -1,5 +1,6 @@
 import type { Book, Chapter, BookPage, PageTemplate, BatchExportConfig } from '@/types'
 import { downloadJSON } from './validation'
+import { jsPDF } from 'jspdf'
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -49,6 +50,8 @@ function collectPages(book: Book, config: BatchExportConfig): BookPage[] {
   if (config.range === 'all') {
     return allPages
   } else if (config.range === 'current') {
+    const chapter = book.chapters.find(c => c.id === config.currentChapterId)
+    if (chapter) return chapter.pages
     if (allPages.length === 0) return []
     return [allPages[0]]
   } else if (config.range === 'custom' && config.customRange) {
@@ -189,24 +192,56 @@ export async function exportBook(
   if (config.format === 'png') {
     await exportPagesAsPng(pages, templates, config)
   } else if (config.format === 'pdf') {
-    const w = window.open('', '_blank')
-    if (w) {
-      let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${config.filename}</title>`
-      html += `<style>@page { size: A4; margin: 10mm; } body { margin: 0; } .page { page-break-after: always; display: flex; justify-content: center; align-items: center; } .page svg { max-width: 100%; max-height: 100vh; } </style>`
-      html += `</head><body>`
-      for (const page of pages) {
-        const template = templates[page.templateId]
-        if (template) {
-          const svg = renderPageToSvg(page, template, 1)
-          html += `<div class="page">${svg}</div>`
-        }
-      }
-      html += `<script>window.onload = function() { window.print(); }<\/script>`
-      html += `</body></html>`
-      w.document.write(html)
-      w.document.close()
+    await exportPagesAsPdf(pages, templates, config)
+  }
+}
+
+async function exportPagesAsPdf(
+  pages: BookPage[],
+  templates: Record<string, PageTemplate>,
+  config: BatchExportConfig
+): Promise<void> {
+  const scale = config.dpi / 96
+  const firstTemplate = templates[pages[0].templateId]
+  if (!firstTemplate) {
+    throw new Error('未找到页面对应的版式')
+  }
+
+  const pageW = firstTemplate.pageSize.width * scale
+  const pageH = firstTemplate.pageSize.height * scale
+  const pdf = new jsPDF({
+    unit: 'px',
+    format: [pageW, pageH],
+    orientation: pageW > pageH ? 'landscape' : 'portrait'
+  })
+
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i]
+    const template = templates[page.templateId]
+    if (!template) continue
+
+    const w = template.pageSize.width * scale
+    const h = template.pageSize.height * scale
+    const svg = renderPageToSvg(page, template, scale)
+    const canvas = await svgToCanvas(svg, w, h)
+    const dataUrl = canvas.toDataURL('image/png')
+
+    if (i > 0) {
+      const curW = template.pageSize.width * scale
+      const curH = template.pageSize.height * scale
+      pdf.addPage([curW, curH], curW > curH ? 'landscape' : 'portrait')
+    }
+
+    pdf.addImage(dataUrl, 'PNG', 0, 0, w, h)
+
+    if (config.watermark && config.watermark.trim()) {
+      pdf.setFontSize(12)
+      pdf.setTextColor(180, 180, 180)
+      pdf.text(config.watermark, w / 2, h - 20, { align: 'center' })
     }
   }
+
+  pdf.save(`${config.filename}.pdf`)
 }
 
 export function parsePageRangeForUI(rangeStr: string): { valid: boolean; pages: number[]; message: string } {

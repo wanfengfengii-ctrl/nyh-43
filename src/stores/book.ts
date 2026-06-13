@@ -380,14 +380,41 @@ export const useBookStore = defineStore('book', () => {
     book.updatedAt = Date.now()
   }
 
+  function getChapterNextPageSide(chapterId: string): PageSide {
+    for (const book of books.value) {
+      const chapter = book.chapters.find(c => c.id === chapterId)
+      if (chapter) {
+        const nextGlobalNum = chapter.startPageNumber + chapter.pages.length
+        return nextGlobalNum % 2 === 0 ? 'left' : 'right'
+      }
+    }
+    return 'right'
+  }
+
   async function importManuscriptToChapter(
     chapterId: string,
     content: string,
     templateId: string,
-    charsPerPage: number = 500
+    charsPerPage: number = 500,
+    startPageSide?: PageSide
   ): Promise<BookPage[]> {
-    const paginationResult = paginateContent(content, charsPerPage)
-    return addPagesFromPagination(chapterId, paginationResult.pages, templateId)
+    let blankPage: BookPage | null = null
+
+    if (startPageSide) {
+      const nextSide = getChapterNextPageSide(chapterId)
+      if (startPageSide !== nextSide) {
+        blankPage = addPage(chapterId, templateId)
+      }
+    }
+
+    const actualStartSide = startPageSide || getChapterNextPageSide(chapterId)
+    const paginationResult = paginateContent(content, charsPerPage, actualStartSide)
+    const result = addPagesFromPagination(chapterId, paginationResult.pages, templateId)
+
+    if (blankPage) {
+      result.unshift(blankPage)
+    }
+    return result
   }
 
   function runPageValidation(pageId: string) {

@@ -239,7 +239,8 @@ async function handleImport() {
       importForm.chapterId,
       importForm.content,
       importForm.templateId,
-      importForm.charsPerPage
+      importForm.charsPerPage,
+      importForm.startSide
     )
     message.success(`成功导入 ${pages.length} 页文稿`)
     emit('imported', pages.length)
