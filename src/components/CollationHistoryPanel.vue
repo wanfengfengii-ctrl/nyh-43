@@ -87,7 +87,7 @@
               <n-space wrap>
                 <div class="stat-item">
                   <span class="stat-label">扫描范围</span>
-                  <span class="stat-value">{{ getChapterNames(history.chapterIds) }}</span>
+                  <span class="stat-value">{{ getChapterNames(history) }}</span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-label">处理时长</span>
@@ -195,14 +195,20 @@ function formatDuration(start: number, end: number): string {
   return `${minutes}分${seconds}秒`
 }
 
-function getChapterNames(chapterIds: string[]): string {
-  if (!bookStore.currentBook) return `${chapterIds.length}个章节`
-  const names: string[] = []
-  for (const cid of chapterIds) {
-    const chapter = bookStore.currentBook.chapters.find(c => c.id === cid)
-    if (chapter) names.push(chapter.title)
+function getChapterNames(history: CollationHistory): string {
+  const chapterIds = history.chapterIds
+  let names: string[] = []
+  if (history.chapters && history.chapters.length > 0) {
+    names = history.chapters.map(c => c.title)
+  } else if (bookStore.currentBook) {
+    for (const cid of chapterIds) {
+      const chapter = bookStore.currentBook.chapters.find(c => c.id === cid)
+      if (chapter) names.push(chapter.title)
+    }
   }
-  if (names.length === 0) return '全书'
+  if (names.length === 0) {
+    return chapterIds.length === 0 ? '全书' : `${chapterIds.length}个章节`
+  }
   if (names.length <= 3) return names.join('、')
   return `${names.slice(0, 3).join('、')}等${names.length}章`
 }

@@ -188,6 +188,7 @@ const props = defineProps<{
   violations?: ViolationItem[]
   elements?: PageElement[]
   collationMatches?: CollationMatch[]
+  content?: string
   showViolations?: boolean
   showCollation?: boolean
   showHandles?: boolean
@@ -404,23 +405,23 @@ function getCollationMatchConfig(match: CollationMatch) {
   const strokeOpacity = match.status === 'ignored' ? 0.4 : 1
 
   let rect = match.rect
-  if (!rect && match.charIndex !== undefined && props.template) {
+  if (!rect && match.charIndex !== undefined && props.template && props.content) {
     rect = calculateMatchRect(
       match.charIndex,
-      '',
-      props.template as any
+      props.content,
+      props.template,
+      14,
+      20,
+      Math.floor(typeSettingWidth.value / 14)
     )
-    if (!rect) {
-      rect = { x: 10, y: 10, width: 20, height: 24 }
-    }
   }
   if (!rect) {
-    rect = { x: 10, y: 10, width: 20, height: 24 }
+    rect = { x: props.template!.margins.left + 10, y: props.template!.margins.top + 10, width: 14, height: 20 }
   }
 
   return {
-    x: rect.x,
-    y: rect.y,
+    x: rect.x - typeSettingX.value,
+    y: rect.y - typeSettingY.value,
     width: rect.width,
     height: rect.height,
     fill: `rgba(${hexToRgb(typeColor)}, ${opacity})`,

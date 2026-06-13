@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { CollationHistory, CollationMatch } from '@/types'
+import type { CollationHistory, CollationMatch, Chapter } from '@/types'
 import { generateId } from '@/utils/validation'
 
 export const useCollationHistoryStore = defineStore('collationHistory', () => {
@@ -15,11 +15,23 @@ export const useCollationHistoryStore = defineStore('collationHistory', () => {
     histories.value.find(h => h.id === currentHistoryId.value) || null
   )
 
+  function snapshotChapters(chapterIds: string[], allChapters: Chapter[]): Array<{ id: string; title: string }> {
+    const result: Array<{ id: string; title: string }> = []
+    const map = new Map(allChapters.map(c => [c.id, c.title]))
+    for (const id of chapterIds) {
+      if (map.has(id)) {
+        result.push({ id, title: map.get(id) || '未知章节' })
+      }
+    }
+    return result
+  }
+
   function createHistory(
     bookId: string,
     bookTitle: string,
     chapterIds: string[],
     matches: CollationMatch[],
+    chapters: Chapter[] = [],
     operator: string = 'user'
   ): CollationHistory {
     const now = Date.now()
@@ -34,6 +46,7 @@ export const useCollationHistoryStore = defineStore('collationHistory', () => {
       ignoredCount: matches.filter(m => m.status === 'ignored').length,
       customCount: matches.filter(m => m.status === 'custom').length,
       chapterIds,
+      chapters: snapshotChapters(chapterIds, chapters),
       operator
     }
     histories.value.push(history)

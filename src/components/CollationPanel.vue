@@ -240,16 +240,18 @@ import {
 import { useBookStore } from '@/stores/book'
 import { useCollationRuleStore } from '@/stores/collation-rules'
 import { useCollationHistoryStore } from '@/stores/collation-history'
+import { useTemplateStore } from '@/stores/template'
 import type { CollationMatch, CollationRuleType } from '@/types'
 import {
   getRuleTypeLabel, getRuleTypeColor, getMatchStatusLabel, getMatchStatusColor,
-  buildRulesForScan
+  buildRulesForScan, calculateMatchRect
 } from '@/utils/collation'
 import CollationReportDialog from './CollationReportDialog.vue'
 
 const bookStore = useBookStore()
 const ruleStore = useCollationRuleStore()
 const historyStore = useCollationHistoryStore()
+const templateStore = useTemplateStore()
 const message = useMessage()
 const dialog = useDialog()
 
@@ -395,7 +397,8 @@ async function handleStartScan() {
         bookStore.currentBookId,
         bookStore.currentBook.title,
         historyChapterIds,
-        matches
+        matches,
+        bookStore.currentBook.chapters
       )
     }
 
@@ -412,7 +415,34 @@ function handleSelectMatch(match: CollationMatch) {
 }
 
 function handleLocateMatch(match: CollationMatch) {
-  bookStore.selectPage(match.pageId)
+  let rect = match.rect
+  if (!rect && match.charIndex !== undefined) {
+    let targetPage = bookStore.currentPage
+    if (!targetPage || targetPage.id !== match.pageId) {
+      for (const chapter of bookStore.currentBook?.chapters || []) {
+        const p = chapter.pages.find(pp => pp.id === match.pageId)
+        if (p) {
+          targetPage = p
+          break
+        }
+      }
+    }
+    if (targetPage && targetPage.content) {
+      const template = templateStore.templates.find(t => t.id === targetPage.templateId) || templateStore.currentTemplate
+      if (template) {
+        const typeSettingWidth = template.pageSize.width - template.margins.left - template.margins.right
+        rect = calculateMatchRect(
+          match.charIndex,
+          targetPage.content,
+          template,
+          14,
+          20,
+          Math.floor(typeSettingWidth / 14)
+        )
+      }
+    }
+  }
+  bookStore.focusCollationMatch(match, rect)
   message.info(`已定位到 ${getChapterTitle(match.chapterId)} 第${getPageNumber(match.pageId)}页`)
 }
 

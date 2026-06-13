@@ -271,6 +271,7 @@ export interface CollationHistory {
   ignoredCount: number
   customCount: number
   chapterIds: string[]
+  chapters: Array<{ id: string; title: string }>
   operator: string
 }
 

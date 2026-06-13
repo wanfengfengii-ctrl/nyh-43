@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Book, Chapter, BookPage, PageElement, PageSide, CollationMatch } from '@/types'
+import type { Book, Chapter, BookPage, PageElement, PageSide, CollationMatch, ViolationRect } from '@/types'
 import { generateId } from '@/utils/validation'
 import { paginateContent } from '@/utils/pagination'
 import { validatePage } from '@/utils/validation'
@@ -59,6 +59,8 @@ export const useBookStore = defineStore('book', () => {
   const currentChapterId = ref<string | null>(null)
   const currentPageId = ref<string | null>(null)
   const showSpreadView = ref(false)
+  const focusedCollationMatchId = ref<string | null>(null)
+  const focusedCollationRect = ref<ViolationRect | null>(null)
 
   const currentBook = computed<Book | null>(() => {
     return books.value.find(b => b.id === currentBookId.value) || null
@@ -555,12 +557,25 @@ export const useBookStore = defineStore('book', () => {
     }
   }
 
+  function focusCollationMatch(match: CollationMatch, rect?: ViolationRect) {
+    selectPage(match.pageId)
+    focusedCollationMatchId.value = match.id
+    focusedCollationRect.value = rect || match.rect || null
+  }
+
+  function clearCollationFocus() {
+    focusedCollationMatchId.value = null
+    focusedCollationRect.value = null
+  }
+
   return {
     books,
     currentBookId,
     currentChapterId,
     currentPageId,
     showSpreadView,
+    focusedCollationMatchId,
+    focusedCollationRect,
     currentBook,
     currentChapter,
     currentPage,
@@ -597,7 +612,9 @@ export const useBookStore = defineStore('book', () => {
     updateCollationMatchStatus,
     getBookCollationMatches,
     clearPageCollation,
-    clearBookCollation
+    clearBookCollation,
+    focusCollationMatch,
+    clearCollationFocus
   }
 }, {
   persist: {

@@ -60,6 +60,7 @@
               :violations="p.violations"
               :elements="p.elements"
               :collation-matches="p.collationMatches"
+              :content="p.content"
               :show-violations="true"
               :show-collation="true"
               :show-handles="false"
@@ -89,6 +90,7 @@
             :violations="currentBookPage.violations"
             :elements="currentBookPage.elements"
             :collation-matches="currentBookPage.collationMatches"
+            :content="currentBookPage.content"
             :show-violations="true"
             :show-collation="true"
             :show-handles="!hasPages"
@@ -188,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useCanvasStore } from '@/stores/canvas'
 import { useBookStore } from '@/stores/book'
@@ -507,6 +509,56 @@ function handleElementClick(el: PageElement) {
   message.info(`选中元素: ${el.type} - ${el.content.slice(0, 20)}`)
   canvasStore.selectElement(el.id)
 }
+
+const focusedPulse = ref(false)
+
+function getCurrentPagePageX(): number {
+  if (showSpreadView.value && hasPages.value) {
+    const idx = bookStore.currentPageIndex
+    const leftIdx = idx % 2 === 0 ? idx - 1 : idx
+    if (idx === leftIdx) return getSpreadPageX(0)
+    return getSpreadPageX(1)
+  }
+  return singlePageX.value
+}
+
+function scrollToCollationFocus() {
+  const rect = bookStore.focusedCollationRect
+  const pageId = bookStore.currentPageId
+  if (!rect || !pageId || !bookStore.currentPage || !displayTemplate.value) return
+
+  const tpl = displayTemplate.value
+  const pageContentX = tpl.margins.left
+  const pageContentY = tpl.margins.top
+
+  const pageX = getCurrentPagePageX()
+  const targetWorldX = pageX + rect.x
+  const targetWorldY = pageY.value + rect.y
+
+  const stageCenterX = stageWidth.value / 2
+  const stageCenterY = stageHeight.value / 2
+
+  const newOffsetX = stageCenterX - targetWorldX * canvasStore.scale
+  const newOffsetY = stageCenterY - targetWorldY * canvasStore.scale
+
+  canvasStore.setOffset(newOffsetX, newOffsetY)
+
+  focusedPulse.value = true
+  setTimeout(() => {
+    focusedPulse.value = false
+    bookStore.clearCollationFocus()
+  }, 1200)
+}
+
+watch(
+  () => [bookStore.focusedCollationMatchId, bookStore.currentPageId],
+  async () => {
+    if (bookStore.focusedCollationMatchId && bookStore.focusedCollationRect) {
+      await nextTick()
+      scrollToCollationFocus()
+    }
+  }
+)
 
 function handleCollationMatchClick(match: CollationMatch) {
   message.info(
