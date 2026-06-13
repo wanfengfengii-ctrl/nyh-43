@@ -46,7 +46,7 @@
         />
       </v-group>
 
-      <v-group v-for="(col, index) in columnLines" :key="index">
+      <v-group v-for="(col, index) in columnLines" :key="'col-' + index">
         <v-line
           :config="{
             points: [col, 0, col, typeSettingHeight],
@@ -82,6 +82,37 @@
           :orientation="'up'"
         />
       </template>
+
+      <v-group v-if="showViolations">
+        <v-rect
+          v-for="v in pageViolations"
+          :key="'violation-' + v.id"
+          :config="getViolationConfig(v)"
+        />
+      </v-group>
+
+      <v-group v-if="pageElements && pageElements.length > 0">
+        <v-rect
+          v-for="el in pageElements"
+          :key="'el-' + el.id"
+          :config="getElementConfig(el)"
+          @click="handleElementClick(el)"
+        />
+        <v-text
+          v-for="el in pageElements.filter(e => e.type === 'text')"
+          :key="'text-' + el.id"
+          :config="{
+            x: typeSettingX + el.x,
+            y: typeSettingY + el.y,
+            text: el.content,
+            fontSize: 14,
+            fontFamily: 'SimSun, serif',
+            fill: '#2c2c2c',
+            width: el.width,
+            listening: true
+          }"
+        />
+      </v-group>
 
       <v-group v-if="showHandles">
         <v-rect
@@ -133,7 +164,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useTemplateStore } from '@/stores/template'
-import type { PageTemplate, PageSide } from '@/types'
+import type { PageTemplate, PageSide, ViolationItem, PageElement } from '@/types'
 import FishTail from './FishTail.vue'
 import MarginLabels from './MarginLabels.vue'
 import PageLabels from './PageLabels.vue'
@@ -144,14 +175,22 @@ const props = defineProps<{
   x: number
   y: number
   scale: number
+  violations?: ViolationItem[]
+  elements?: PageElement[]
+  showViolations?: boolean
+  showHandles?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'select', element: string): void
+  (e: 'elementClick', element: PageElement): void
 }>()
 
 const templateStore = useTemplateStore()
-const showHandles = ref(true)
+const showHandles = computed(() => props.showHandles ?? true)
+const showViolations = computed(() => props.showViolations ?? true)
+const pageViolations = computed(() => props.violations || [])
+const pageElements = computed(() => props.elements || [])
 
 const typeSettingX = computed(() => {
   if (!props.template) return 0
@@ -309,5 +348,42 @@ function handleWindowMouseUp() {
   dragHandleType = null
   window.removeEventListener('mousemove', handleWindowMouseMove)
   window.removeEventListener('mouseup', handleWindowMouseUp)
+}
+
+function getViolationConfig(violation: ViolationItem) {
+  const isError = violation.severity === 'error'
+  return {
+    x: violation.rect.x - (typeSettingX.value),
+    y: violation.rect.y - (typeSettingY.value),
+    width: violation.rect.width,
+    height: violation.rect.height,
+    fill: isError ? 'rgba(255, 77, 79, 0.2)' : 'rgba(250, 173, 20, 0.2)',
+    stroke: isError ? '#ff4d4f' : '#faad14',
+    strokeWidth: 2,
+    dash: [6, 4],
+    listening: false,
+    perfectDrawEnabled: false
+  }
+}
+
+function getElementConfig(element: PageElement) {
+  return {
+    x: element.x,
+    y: element.y,
+    width: element.width,
+    height: element.height,
+    fill: 'rgba(24, 144, 255, 0.1)',
+    stroke: '#1890ff',
+    strokeWidth: 1,
+    dash: [3, 3],
+    listening: true,
+    cursor: 'pointer',
+    name: `element-${element.id}`
+  }
+}
+
+function handleElementClick(element: PageElement) {
+  emit('elementClick', element)
+  emit('select', element.id)
 }
 </script>

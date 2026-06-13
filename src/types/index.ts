@@ -104,7 +104,124 @@ export interface ValidationResult {
 }
 
 export interface ExportOptions {
-  format: 'png' | 'svg' | 'json'
+  format: 'png' | 'svg' | 'json' | 'pdf'
   includeBothPages: boolean
   dpi: number
+}
+
+export type ViolationType =
+  | 'margin_overflow'
+  | 'column_conflict'
+  | 'fishtail_occlusion'
+  | 'binding_conflict'
+
+export interface ViolationRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ViolationItem {
+  id: string
+  type: ViolationType
+  severity: 'error' | 'warning'
+  message: string
+  pageId: string
+  rect: ViolationRect
+}
+
+export type PageElementType = 'text' | 'image' | 'comment' | 'seal'
+
+export interface PageElement {
+  id: string
+  type: PageElementType
+  x: number
+  y: number
+  width: number
+  height: number
+  content: string
+  rotation?: number
+  zIndex?: number
+}
+
+export interface BookPage {
+  id: string
+  chapterId: string
+  pageNumber: number
+  pageSide: PageSide
+  templateId: string
+  elements: PageElement[]
+  violations: ViolationItem[]
+  content: string
+}
+
+export interface Chapter {
+  id: string
+  bookId: string
+  title: string
+  order: number
+  startPageNumber: number
+  pageCount: number
+  templateId: string
+  pages: BookPage[]
+}
+
+export interface Book {
+  id: string
+  title: string
+  author: string
+  description: string
+  totalPages: number
+  createdAt: number
+  updatedAt: number
+  chapters: Chapter[]
+  defaultTemplateId: string | null
+}
+
+export interface TemplateVersion {
+  id: string
+  templateId: string
+  version: number
+  snapshot: PageTemplate
+  note: string
+  createdAt: number
+  author: string
+}
+
+export interface TemplateDiff {
+  field: string
+  oldValue: unknown
+  newValue: unknown
+  path: string
+}
+
+export interface BatchExportConfig {
+  format: 'pdf' | 'png'
+  dpi: number
+  range: 'all' | 'current' | 'custom'
+  customRange?: string
+  includeViolations: boolean
+  watermark?: string
+  filename: string
+}
+
+export interface ImportManuscriptConfig {
+  content: string
+  source: 'text' | 'file'
+  filename?: string
+  encoding?: string
+  autoPaginate: boolean
+  charactersPerPage: number
+  startChapter: string
+}
+
+export interface PaginationResult {
+  pages: Array<{
+    content: string
+    pageSide: PageSide
+    chapterTitle?: string
+  }>
+  totalPages: number
+  estimatedChars: number
 }

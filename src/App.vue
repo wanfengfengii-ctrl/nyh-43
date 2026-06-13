@@ -30,10 +30,28 @@
             <n-button
               size="small"
               type="primary"
-              :disabled="!templateStore.isCurrentComplete"
+              quaternary
+              @click="showTemplateCompare = true"
+            >
+              <template #icon><n-icon><GitCompare /></n-icon></template>
+              版本对比
+            </n-button>
+            <n-button
+              size="small"
+              type="primary"
+              quaternary
+              @click="showImportDialog = true"
+            >
+              <template #icon><n-icon><CloudUpload /></n-icon></template>
+              导入文稿
+            </n-button>
+            <n-button
+              size="small"
+              type="primary"
+              :disabled="!templateStore.isCurrentComplete && !bookStore.currentBook"
               @click="showExportDialog = true"
             >
-              导出版式
+              导出版式/书籍
             </n-button>
             <n-dropdown :options="menuOptions" @select="handleMenuSelect">
               <n-button size="small">
@@ -49,7 +67,14 @@
 
       <div class="app-body">
         <aside class="sidebar-left">
-          <TemplateList />
+          <n-tabs type="line" animated>
+            <n-tab-pane name="templates" tab="版式方案">
+              <TemplateList />
+            </n-tab-pane>
+            <n-tab-pane name="books" tab="书籍管理">
+              <BookManager @show-import="handleShowImportFromBook" />
+            </n-tab-pane>
+          </n-tabs>
         </aside>
 
         <main class="canvas-area">
@@ -57,40 +82,72 @@
         </main>
 
         <aside class="sidebar-right">
-          <PropertyPanel />
+          <n-tabs type="line" animated>
+            <n-tab-pane name="properties" tab="属性编辑">
+              <PropertyPanel />
+            </n-tab-pane>
+            <n-tab-pane name="validation" tab="版式校验">
+              <ViolationPanel />
+            </n-tab-pane>
+          </n-tabs>
         </aside>
       </div>
 
       <ExportDialog v-model:show="showExportDialog" />
       <SpreadPreview v-model:show="showSpreadPreview" @export="showExportDialog = true" />
+      <TemplateCompare
+        v-model:show="showTemplateCompare"
+        @restore="handleRestoreTemplate"
+      />
+      <ImportDialog
+        v-model:show="showImportDialog"
+        :default-chapter-id="defaultImportChapterId"
+        @imported="handleImported"
+      />
     </div>
   </n-config-provider>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NConfigProvider, NButton, NSpace, NDropdown, NIcon, useMessage } from 'naive-ui'
-import { ChevronDown } from '@vicons/ionicons5'
+import {
+  NConfigProvider, NButton, NSpace, NDropdown, NIcon, useMessage, NTabPane, NTabs
+} from 'naive-ui'
+import { ChevronDown, CloudUpload, GitCompare } from '@vicons/ionicons5'
 import { useTemplateStore } from '@/stores/template'
 import { useCanvasStore } from '@/stores/canvas'
+import { useBookStore } from '@/stores/book'
+import { useTemplateVersionStore } from '@/stores/template-version'
 import TemplateList from '@/components/TemplateList.vue'
 import PropertyPanel from '@/components/PropertyPanel.vue'
 import CanvasView from '@/components/CanvasView.vue'
 import ExportDialog from '@/components/ExportDialog.vue'
 import SpreadPreview from '@/components/SpreadPreview.vue'
+import BookManager from '@/components/BookManager.vue'
+import ViolationPanel from '@/components/ViolationPanel.vue'
+import TemplateCompare from '@/components/TemplateCompare.vue'
+import ImportDialog from '@/components/ImportDialog.vue'
+import type { PageTemplate } from '@/types'
 
 const templateStore = useTemplateStore()
 const canvasStore = useCanvasStore()
+const bookStore = useBookStore()
+const versionStore = useTemplateVersionStore()
 const message = useMessage()
 
 const showDoublePage = ref(false)
 const showExportDialog = ref(false)
 const showSpreadPreview = ref(false)
+const showTemplateCompare = ref(false)
+const showImportDialog = ref(false)
+const defaultImportChapterId = ref('')
 const theme = computed(() => undefined)
 
 const menuOptions = [
   { label: '新建版式', key: 'new' },
+  { label: '保存版式版本', key: 'save-version' },
   { label: '导入版式', key: 'import' },
+  { label: '新建书籍', key: 'new-book' },
   { label: '清空辅助线', key: 'clear-guides' }
 ]
 
@@ -122,14 +179,42 @@ function handleShowSpreadPreview() {
   showSpreadPreview.value = true
 }
 
+function handleShowImportFromBook(chapterId: string) {
+  defaultImportChapterId.value = chapterId
+  showImportDialog.value = true
+}
+
+function handleImported(pageCount: number) {
+  message.success(`成功导入 ${pageCount} 页文稿`)
+}
+
+function handleRestoreTemplate(tpl: PageTemplate) {
+  if (!templateStore.currentTemplateId) return
+  const { id, createdAt, updatedAt, ...rest } = tpl
+  templateStore.updateTemplate(templateStore.currentTemplateId, rest)
+  message.success('已恢复到指定版本')
+}
+
 function handleMenuSelect(key: string) {
   switch (key) {
     case 'new':
       templateStore.addTemplate()
       message.success('已创建新版式')
       break
+    case 'save-version':
+      if (!templateStore.currentTemplate) {
+        message.warning('请先选择版式')
+        return
+      }
+      versionStore.saveVersion(templateStore.currentTemplate, '手动保存', 'user')
+      message.success('版式版本已保存')
+      break
     case 'import':
-      handleImport()
+      handleImportTemplate()
+      break
+    case 'new-book':
+      bookStore.createBook()
+      message.success('已创建新书籍')
       break
     case 'clear-guides':
       canvasStore.clearGuides()
@@ -138,7 +223,7 @@ function handleMenuSelect(key: string) {
   }
 }
 
-function handleImport() {
+function handleImportTemplate() {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'application/json'
@@ -150,7 +235,7 @@ function handleImport() {
       try {
         const content = ev.target?.result as string
         templateStore.importTemplate(content)
-        message.success('导入成功')
+        message.success('版式导入成功')
       } catch {
         message.error('导入失败，文件格式不正确')
       }
@@ -178,6 +263,7 @@ function handleImport() {
   background-color: #fff;
   border-bottom: 1px solid #e8e8e8;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -208,12 +294,26 @@ function handleImport() {
   display: flex;
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 
 .sidebar-left {
-  width: 260px;
+  width: 300px;
   background-color: #fff;
   border-right: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-left :deep(.n-tabs) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.sidebar-left :deep(.n-tabs-content) {
+  flex: 1;
   overflow-y: auto;
 }
 
@@ -232,9 +332,22 @@ function handleImport() {
 }
 
 .sidebar-right {
-  width: 320px;
+  width: 360px;
   background-color: #fff;
   border-left: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-right :deep(.n-tabs) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.sidebar-right :deep(.n-tabs-content) {
+  flex: 1;
   overflow-y: auto;
 }
 </style>

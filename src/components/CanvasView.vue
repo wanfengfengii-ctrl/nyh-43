@@ -1,5 +1,36 @@
 <template>
   <div class="canvas-wrapper" ref="wrapperRef">
+    <div class="page-navigator" v-if="hasPages">
+      <n-space justify="center">
+        <n-button size="small" :disabled="bookStore.currentPageIndex <= 0" @click="bookStore.navigatePrevPage">
+          <template #icon><n-icon><ChevronBack /></n-icon></template>
+          上一页
+        </n-button>
+        <n-pagination
+          v-model:page="currentPageDisplay"
+          :page-count="totalPageCount"
+          size="small"
+          :show-size-picker="false"
+          simple
+        />
+        <n-button size="small" :disabled="bookStore.currentPageIndex >= totalPageCount - 1" @click="bookStore.navigateNextPage">
+          下一页
+          <template #icon><n-icon><ChevronForward /></n-icon></template>
+        </n-button>
+        <n-divider vertical />
+        <n-button size="small" :type="showSpreadView ? 'primary' : 'default'" @click="toggleSpread">
+          <template #icon><n-icon><Albums /></n-icon></template>
+          {{ showSpreadView ? '单页' : '对开校样' }}
+        </n-button>
+        <n-tag v-if="currentBookPage" size="small" :type="currentBookPage.pageSide === 'left' ? 'default' : 'info'">
+          {{ currentBookPage.pageSide === 'left' ? '左页' : '右页' }} · 第{{ currentBookPage.pageNumber }}页
+        </n-tag>
+        <n-tag v-if="currentBookPage && currentBookPage.violations.length > 0" size="small" type="warning">
+          {{ currentBookPage.violations.length }} 项违规
+        </n-tag>
+      </n-space>
+    </div>
+
     <v-stage
       :config="stageConfig"
       ref="stageRef"
@@ -10,30 +41,74 @@
       @dblclick="handleStageDblClick"
     >
       <v-layer>
-        <template v-if="showDoublePage">
-          <PageRenderer
-            :template="template"
-            :page-side="'left'"
-            :x="doublePageLeftX"
-            :y="pageY"
-            :scale="canvasStore.scale"
-          />
-          <PageRenderer
-            :template="template"
-            :page-side="'right'"
-            :x="doublePageRightX"
-            :y="pageY"
-            :scale="canvasStore.scale"
-          />
+        <template v-if="showSpreadView && hasPages">
+          <template v-for="(p, idx) in spreadPageList" :key="'spread-' + idx">
+            <PageRenderer
+              v-if="p && getTemplateForPage(p)"
+              :template="getTemplateForPage(p)"
+              :page-side="p.pageSide"
+              :x="getSpreadPageX(idx)"
+              :y="pageY"
+              :scale="canvasStore.scale"
+              :violations="p.violations"
+              :elements="p.elements"
+              :show-violations="true"
+              :show-handles="false"
+              @element-click="handleElementClick"
+            />
+            <v-text
+              v-if="p"
+              :config="{
+                x: getSpreadPageX(idx) + (getTemplateForPage(p)?.pageSize.width || 400) / 2 - 30,
+                y: pageY - 28,
+                text: `第${p.pageNumber}页 · ${p.pageSide === 'left' ? '左' : '右'}`,
+                fontSize: 13,
+                fontFamily: 'sans-serif',
+                fill: '#666'
+              }"
+            />
+          </template>
         </template>
-        <template v-else>
+        <template v-else-if="currentBookPage && currentPageTemplate">
           <PageRenderer
-            :template="template"
-            :page-side="'single'"
+            :template="currentPageTemplate"
+            :page-side="currentBookPage.pageSide"
             :x="singlePageX"
             :y="pageY"
             :scale="canvasStore.scale"
+            :violations="currentBookPage.violations"
+            :elements="currentBookPage.elements"
+            :show-violations="true"
+            :show-handles="!hasPages"
+            @element-click="handleElementClick"
           />
+        </template>
+        <template v-else>
+          <template v-if="showDoublePage">
+            <PageRenderer
+              :template="template"
+              :page-side="'left'"
+              :x="doublePageLeftX"
+              :y="pageY"
+              :scale="canvasStore.scale"
+            />
+            <PageRenderer
+              :template="template"
+              :page-side="'right'"
+              :x="doublePageRightX"
+              :y="pageY"
+              :scale="canvasStore.scale"
+            />
+          </template>
+          <template v-else>
+            <PageRenderer
+              :template="template"
+              :page-side="'single'"
+              :x="singlePageX"
+              :y="pageY"
+              :scale="canvasStore.scale"
+            />
+          </template>
         </template>
 
         <template v-if="canvasStore.showGuides">
@@ -91,25 +166,36 @@
 
     <div class="canvas-info">
       <span>缩放: {{ canvasStore.scalePercent }}%</span>
-      <span v-if="template">页面: {{ template.pageSize.width }} × {{ template.pageSize.height }}px</span>
+      <span v-if="displayTemplate">
+        页面: {{ displayTemplate.pageSize.width }} × {{ displayTemplate.pageSize.height }}px
+      </span>
       <span v-if="canvasStore.guides.length > 0">辅助线: {{ canvasStore.guides.length }} (双击删除)</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useCanvasStore } from '@/stores/canvas'
-import type { PageTemplate, GuideLine } from '@/types'
+import { useBookStore } from '@/stores/book'
+import type { PageTemplate, GuideLine, BookPage, PageElement } from '@/types'
+import { NButton, NSpace, NIcon, NPagination, NTag, NDivider, useMessage } from 'naive-ui'
+import { ChevronBack, ChevronForward, Albums } from '@vicons/ionicons5'
 import PageRenderer from './PageRenderer.vue'
 
 const props = defineProps<{
   showDoublePage: boolean
 }>()
 
+const emit = defineEmits<{
+  (e: 'locateViolation', pageId: string): void
+}>()
+
 const templateStore = useTemplateStore()
 const canvasStore = useCanvasStore()
+const bookStore = useBookStore()
+const message = useMessage()
 
 const wrapperRef = ref<HTMLDivElement | null>(null)
 const stageRef = ref<any>(null)
@@ -118,38 +204,88 @@ const stageHeight = ref(600)
 
 const RULER_SIZE = 20
 const BINDING_MARGIN = 30
+const NAV_HEIGHT = 48
 
 const template = computed<PageTemplate | null>(() => templateStore.currentTemplate)
 
+const hasPages = computed(() => bookStore.allPages.length > 0)
+const showSpreadView = computed(() => bookStore.showSpreadView)
+const totalPageCount = computed(() => bookStore.allPages.length)
+
+const currentPageDisplay = computed({
+  get: () => Math.max(1, bookStore.currentPageIndex + 1),
+  set: (v: number) => {
+    const pages = bookStore.allPages
+    if (pages[v - 1]) {
+      bookStore.selectPage(pages[v - 1].id)
+    }
+  }
+})
+
+const currentBookPage = computed<BookPage | null>(() => bookStore.currentPage)
+
+const currentPageTemplate = computed<PageTemplate | null>(() => {
+  if (!currentBookPage.value) return null
+  return templateStore.templates.find(t => t.id === currentBookPage.value?.templateId) || template.value
+})
+
+const displayTemplate = computed(() => currentPageTemplate.value || template.value)
+
+const spreadPageList = computed(() => {
+  if (!hasPages.value) return []
+  return bookStore.spreadPages
+})
+
+function getTemplateForPage(page: BookPage | null): PageTemplate | null {
+  if (!page) return null
+  return templateStore.templates.find(t => t.id === page.templateId) || template.value
+}
+
 const bindingGap = computed(() => {
-  if (!template.value) return BINDING_MARGIN
-  return Math.max(BINDING_MARGIN, template.value.margins.left + template.value.margins.right)
+  const t = displayTemplate.value
+  if (!t) return BINDING_MARGIN
+  return Math.max(BINDING_MARGIN, t.margins.left + t.margins.right)
 })
 
 const pageY = computed(() => {
-  if (!template.value) return 100
+  const t = displayTemplate.value
+  if (!t) return 100 + NAV_HEIGHT
   const rulerOffset = canvasStore.showRuler ? RULER_SIZE / canvasStore.scale : 0
-  return (stageHeight.value - template.value.pageSize.height * canvasStore.scale) / 2 / canvasStore.scale + rulerOffset
+  const navOffset = NAV_HEIGHT / canvasStore.scale
+  return (stageHeight.value - t.pageSize.height * canvasStore.scale) / 2 / canvasStore.scale + rulerOffset + navOffset
 })
 
 const singlePageX = computed(() => {
-  if (!template.value) return 100
+  const t = displayTemplate.value
+  if (!t) return 100
   const rulerOffset = canvasStore.showRuler ? RULER_SIZE / canvasStore.scale : 0
-  return (stageWidth.value - template.value.pageSize.width * canvasStore.scale) / 2 / canvasStore.scale + rulerOffset
+  return (stageWidth.value - t.pageSize.width * canvasStore.scale) / 2 / canvasStore.scale + rulerOffset
 })
 
 const doublePageLeftX = computed(() => {
-  if (!template.value) return 50
+  const t = displayTemplate.value
+  if (!t) return 50
   const rulerOffset = canvasStore.showRuler ? RULER_SIZE / canvasStore.scale : 0
-  const totalWidth = template.value.pageSize.width * 2 * canvasStore.scale + bindingGap.value * canvasStore.scale
+  const totalWidth = t.pageSize.width * 2 * canvasStore.scale + bindingGap.value * canvasStore.scale
   const startX = (stageWidth.value - totalWidth) / 2 / canvasStore.scale + rulerOffset
   return startX
 })
 
 const doublePageRightX = computed(() => {
-  if (!template.value) return 400
-  return doublePageLeftX.value + template.value.pageSize.width + bindingGap.value
+  const t = displayTemplate.value
+  if (!t) return 400
+  return doublePageLeftX.value + t.pageSize.width + bindingGap.value
 })
+
+function getSpreadPageX(idx: number): number {
+  const t = displayTemplate.value
+  if (!t) return 100 + idx * 400
+  const rulerOffset = canvasStore.showRuler ? RULER_SIZE / canvasStore.scale : 0
+  const totalWidth = t.pageSize.width * 2 * canvasStore.scale + bindingGap.value * canvasStore.scale
+  const startX = (stageWidth.value - totalWidth) / 2 / canvasStore.scale + rulerOffset
+  if (idx === 0) return startX
+  return startX + t.pageSize.width + bindingGap.value
+}
 
 const stageConfig = computed(() => ({
   width: stageWidth.value,
@@ -350,6 +486,15 @@ function handleGuideDblClick(id: string) {
   canvasStore.removeGuide(id)
 }
 
+function toggleSpread() {
+  bookStore.toggleSpreadView()
+}
+
+function handleElementClick(el: PageElement) {
+  message.info(`选中元素: ${el.type} - ${el.content.slice(0, 20)}`)
+  canvasStore.selectElement(el.id)
+}
+
 function updateSize() {
   if (!wrapperRef.value) return
   const rect = wrapperRef.value.getBoundingClientRect()
@@ -384,6 +529,20 @@ onUnmounted(() => {
   cursor: grabbing;
 }
 
+.page-navigator {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 0;
+  height: 48px;
+  z-index: 15;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid #e8e8e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .ruler {
   position: absolute;
   background-color: #fafafa;
@@ -394,7 +553,7 @@ onUnmounted(() => {
 }
 
 .ruler-h {
-  top: 0;
+  top: 48px;
   left: 20px;
   right: 0;
   height: 20px;
@@ -404,7 +563,7 @@ onUnmounted(() => {
 }
 
 .ruler-v {
-  top: 20px;
+  top: 68px;
   left: 0;
   bottom: 0;
   width: 20px;
@@ -478,7 +637,7 @@ onUnmounted(() => {
 
 .ruler-corner {
   position: absolute;
-  top: 0;
+  top: 48px;
   left: 0;
   width: 20px;
   height: 20px;
