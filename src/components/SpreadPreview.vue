@@ -58,7 +58,7 @@
             </div>
           </div>
           <div class="page-label">左页 · {{ template.code }}</div>
-          <div class="binding-indicator binding-left">← 装订边</div>
+          <div class="binding-indicator binding-left">装订边 →</div>
         </div>
 
         <div class="binding-gap">
@@ -100,7 +100,7 @@
             </div>
           </div>
           <div class="page-label">右页 · {{ template.code }}</div>
-          <div class="binding-indicator binding-right">装订边 →</div>
+          <div class="binding-indicator binding-right">← 装订边</div>
         </div>
       </div>
     </div>

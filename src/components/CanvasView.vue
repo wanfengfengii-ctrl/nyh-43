@@ -228,6 +228,7 @@ let startOffsetY = 0
 
 let isDraggingGuide = false
 let draggingGuideId: string | null = null
+let isCreatingFromRuler = false
 
 function handleWheel(e: WheelEvent) {
   e.preventDefault()
@@ -249,25 +250,18 @@ function handleStageMouseDown(e: any) {
 }
 
 function handleStageMouseMove(e: any) {
-  if (creatingGuide.value) {
-    const pos = getStagePointerPosition(e)
-    if (creatingGuide.value.type === 'horizontal') {
-      creatingGuide.value.position = pos.y
-    } else {
-      creatingGuide.value.position = pos.x
-    }
-  }
   if (isDraggingGuide && draggingGuideId) {
     const pos = getStagePointerPosition(e)
-    canvasStore.updateGuide(draggingGuideId, creatingGuide.value?.type === 'horizontal' ? pos.y : pos.x)
+    const guide = canvasStore.guides.find(g => g.id === draggingGuideId)
+    if (guide) {
+      const newPos = guide.type === 'horizontal' ? pos.y : pos.x
+      canvasStore.updateGuide(draggingGuideId, newPos)
+    }
   }
 }
 
 function handleStageMouseUp() {
-  if (creatingGuide.value) {
-    canvasStore.addGuide(creatingGuide.value.type, creatingGuide.value.position)
-    creatingGuide.value = null
-  }
+  if (isCreatingFromRuler) return
   isDraggingGuide = false
   draggingGuideId = null
 }
@@ -314,6 +308,7 @@ function handleRulerMouseDown(e: MouseEvent, type: 'horizontal' | 'vertical') {
     type,
     position: type === 'horizontal' ? stagePos.y : stagePos.x
   }
+  isCreatingFromRuler = true
 
   window.addEventListener('mousemove', handleRulerMouseMove)
   window.addEventListener('mouseup', handleRulerMouseUp)
@@ -336,9 +331,10 @@ function handleRulerMouseMove(e: MouseEvent) {
 }
 
 function handleRulerMouseUp() {
-  if (creatingGuide.value) {
+  if (creatingGuide.value && isCreatingFromRuler) {
     canvasStore.addGuide(creatingGuide.value.type, creatingGuide.value.position)
     creatingGuide.value = null
+    isCreatingFromRuler = false
   }
   window.removeEventListener('mousemove', handleRulerMouseMove)
   window.removeEventListener('mouseup', handleRulerMouseUp)
@@ -348,7 +344,6 @@ function handleGuideMouseDown(e: any, guide: GuideLine) {
   e.cancelBubble = true
   isDraggingGuide = true
   draggingGuideId = guide.id
-  creatingGuide.value = { type: guide.type, position: guide.position }
 }
 
 function handleGuideDblClick(id: string) {

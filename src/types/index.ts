@@ -91,6 +91,8 @@ export interface PerTemplateCanvasState {
   offsetY: number
   guides: GuideLine[]
   selectedElement: string | null
+  showRuler: boolean
+  showGuides: boolean
 }
 
 export type TemplateCanvasStates = Record<string, PerTemplateCanvasState>

@@ -10,7 +10,9 @@ function createDefaultPerTemplateState(): PerTemplateCanvasState {
     offsetX: 0,
     offsetY: 0,
     guides: [],
-    selectedElement: null
+    selectedElement: null,
+    showRuler: true,
+    showGuides: true
   }
 }
 
@@ -18,8 +20,6 @@ export const useCanvasStore = defineStore('canvas', () => {
   const perTemplateStates = ref<TemplateCanvasStates>({})
   const currentTemplateId = ref<string | null>(null)
 
-  const showRuler = ref(true)
-  const showGuides = ref(true)
   const ruler = ref<RulerConfig>({
     enabled: true,
     unit: 'px',
@@ -86,6 +86,26 @@ export const useCanvasStore = defineStore('canvas', () => {
       if (currentTemplateId.value) {
         ensureStateExists()
         perTemplateStates.value[currentTemplateId.value].selectedElement = v
+      }
+    }
+  })
+
+  const showRuler = computed({
+    get: () => currentState.value.showRuler,
+    set: (v: boolean) => {
+      if (currentTemplateId.value) {
+        ensureStateExists()
+        perTemplateStates.value[currentTemplateId.value].showRuler = v
+      }
+    }
+  })
+
+  const showGuides = computed({
+    get: () => currentState.value.showGuides,
+    set: (v: boolean) => {
+      if (currentTemplateId.value) {
+        ensureStateExists()
+        perTemplateStates.value[currentTemplateId.value].showGuides = v
       }
     }
   })
@@ -225,6 +245,6 @@ export const useCanvasStore = defineStore('canvas', () => {
 }, {
   persist: {
     key: 'ancient-book-canvas',
-    paths: ['perTemplateStates', 'showRuler', 'showGuides', 'ruler', 'currentTemplateId']
+    paths: ['perTemplateStates', 'ruler', 'currentTemplateId']
   }
 })

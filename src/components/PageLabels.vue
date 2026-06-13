@@ -2,8 +2,8 @@
   <v-group>
     <v-text
       :config="{
-        x: typeSettingX,
-        y: typeSettingY - 25,
+        x: 0,
+        y: -25,
         text: pageLabelText,
         fontSize: 11,
         fill: '#666',
@@ -14,12 +14,12 @@
     <template v-if="pageSide === 'left'">
       <v-text
         :config="{
-          x: typeSettingX + typeSettingWidth + 10,
-          y: typeSettingY + typeSettingHeight / 2 - 5,
-          text: '装订边',
+          x: pageWidth - rightMargin - 30,
+          y: pageHeight / 2 - 5,
+          text: '装订边 →',
           fontSize: 9,
-          fill: '#999',
-          rotation: 90,
+          fill: '#c53d43',
+          rotation: -90,
           listening: false
         }"
       />
@@ -28,12 +28,12 @@
     <template v-if="pageSide === 'right'">
       <v-text
         :config="{
-          x: typeSettingX - 30,
-          y: typeSettingY + typeSettingHeight / 2 - 5,
-          text: '装订边',
+          x: leftMargin + 10,
+          y: pageHeight / 2 - 5,
+          text: '← 装订边',
           fontSize: 9,
-          fill: '#999',
-          rotation: -90,
+          fill: '#c53d43',
+          rotation: 90,
           listening: false
         }"
       />
@@ -59,4 +59,9 @@ const pageLabelText = computed(() => {
   const sideText = props.pageSide === 'left' ? '左页' : props.pageSide === 'right' ? '右页' : '单页'
   return `${props.template.code} - ${props.template.name} (${sideText})`
 })
+
+const pageWidth = computed(() => props.template?.pageSize.width || 0)
+const pageHeight = computed(() => props.template?.pageSize.height || 0)
+const leftMargin = computed(() => props.template?.margins.left || 0)
+const rightMargin = computed(() => props.template?.margins.right || 0)
 </script>
