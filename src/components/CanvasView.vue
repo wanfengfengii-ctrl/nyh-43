@@ -28,6 +28,13 @@
         <n-tag v-if="currentBookPage && currentBookPage.violations.length > 0" size="small" type="warning">
           {{ currentBookPage.violations.length }} 项违规
         </n-tag>
+        <n-tag
+          v-if="currentBookPage && currentBookPage.collationMatches && currentBookPage.collationMatches.length > 0"
+          size="small"
+          type="info"
+        >
+          {{ currentBookPage.collationMatches.filter(m => m.status === 'pending').length }}/{{ currentBookPage.collationMatches.length }} 校勘
+        </n-tag>
       </n-space>
     </div>
 
@@ -52,9 +59,12 @@
               :scale="canvasStore.scale"
               :violations="p.violations"
               :elements="p.elements"
+              :collation-matches="p.collationMatches"
               :show-violations="true"
+              :show-collation="true"
               :show-handles="false"
               @element-click="handleElementClick"
+              @collation-match-click="handleCollationMatchClick"
             />
             <v-text
               v-if="p"
@@ -78,9 +88,12 @@
             :scale="canvasStore.scale"
             :violations="currentBookPage.violations"
             :elements="currentBookPage.elements"
+            :collation-matches="currentBookPage.collationMatches"
             :show-violations="true"
+            :show-collation="true"
             :show-handles="!hasPages"
             @element-click="handleElementClick"
+            @collation-match-click="handleCollationMatchClick"
           />
         </template>
         <template v-else>
@@ -179,7 +192,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useTemplateStore } from '@/stores/template'
 import { useCanvasStore } from '@/stores/canvas'
 import { useBookStore } from '@/stores/book'
-import type { PageTemplate, GuideLine, BookPage, PageElement } from '@/types'
+import type { PageTemplate, GuideLine, BookPage, PageElement, CollationMatch } from '@/types'
 import { NButton, NSpace, NIcon, NPagination, NTag, NDivider, useMessage } from 'naive-ui'
 import { ChevronBack, ChevronForward, Albums } from '@vicons/ionicons5'
 import PageRenderer from './PageRenderer.vue'
@@ -493,6 +506,12 @@ function toggleSpread() {
 function handleElementClick(el: PageElement) {
   message.info(`选中元素: ${el.type} - ${el.content.slice(0, 20)}`)
   canvasStore.selectElement(el.id)
+}
+
+function handleCollationMatchClick(match: CollationMatch) {
+  message.info(
+    `${match.type === 'variant' ? '异体字' : match.type === 'borrowed' ? '通假字' : '避讳字'}: ${match.originalChar} → ${match.standardChar}`
+  )
 }
 
 function updateSize() {

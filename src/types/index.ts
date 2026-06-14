@@ -154,6 +154,7 @@ export interface BookPage {
   elements: PageElement[]
   violations: ViolationItem[]
   content: string
+  collationMatches: CollationMatch[]
 }
 
 export interface Chapter {
@@ -225,4 +226,64 @@ export interface PaginationResult {
   }>
   totalPages: number
   estimatedChars: number
+}
+
+export type CollationRuleType = 'variant' | 'borrowed' | 'taboo'
+
+export interface CollationRule {
+  id: string
+  type: CollationRuleType
+  originalChar: string
+  standardChar: string
+  source: string
+  description: string
+  confidence: number
+  isBuiltIn: boolean
+  createdAt: number
+  createdBy: string
+}
+
+export interface CollationMatch {
+  id: string
+  ruleId: string
+  type: CollationRuleType
+  originalChar: string
+  standardChar: string
+  position: number
+  pageId: string
+  chapterId: string
+  source: string
+  description: string
+  confidence: number
+  status: 'pending' | 'confirmed' | 'ignored' | 'custom'
+  rect?: ViolationRect
+  charIndex?: number
+}
+
+export interface CollationHistory {
+  id: string
+  bookId: string
+  bookTitle: string
+  startTime: number
+  endTime: number
+  totalMatches: number
+  confirmedCount: number
+  ignoredCount: number
+  customCount: number
+  chapterIds: string[]
+  operator: string
+}
+
+export interface CollationReportConfig {
+  bookId: string
+  includeConfirmed: boolean
+  includeIgnored: boolean
+  includePending: boolean
+  format: 'txt' | 'json' | 'csv'
+  filename: string
+}
+
+export interface BookPageCollation {
+  pageId: string
+  matches: CollationMatch[]
 }

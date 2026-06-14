@@ -91,6 +91,15 @@
         />
       </v-group>
 
+      <v-group v-if="showCollation && pageCollationMatches.length > 0">
+        <v-rect
+          v-for="m in pageCollationMatches"
+          :key="'collation-' + m.id"
+          :config="getCollationMatchConfig(m)"
+          @click="handleCollationMatchClick(m)"
+        />
+      </v-group>
+
       <v-group v-if="pageElements && pageElements.length > 0">
         <v-rect
           v-for="el in pageElements"
@@ -164,7 +173,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useTemplateStore } from '@/stores/template'
-import type { PageTemplate, PageSide, ViolationItem, PageElement } from '@/types'
+import type { PageTemplate, PageSide, ViolationItem, PageElement, CollationMatch } from '@/types'
+import { calculateMatchRect, getMatchStatusColor, getRuleTypeColor } from '@/utils/collation'
 import FishTail from './FishTail.vue'
 import MarginLabels from './MarginLabels.vue'
 import PageLabels from './PageLabels.vue'
@@ -177,20 +187,25 @@ const props = defineProps<{
   scale: number
   violations?: ViolationItem[]
   elements?: PageElement[]
+  collationMatches?: CollationMatch[]
   showViolations?: boolean
+  showCollation?: boolean
   showHandles?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'select', element: string): void
   (e: 'elementClick', element: PageElement): void
+  (e: 'collationMatchClick', match: CollationMatch): void
 }>()
 
 const templateStore = useTemplateStore()
 const showHandles = computed(() => props.showHandles ?? true)
 const showViolations = computed(() => props.showViolations ?? true)
+const showCollation = computed(() => props.showCollation ?? true)
 const pageViolations = computed(() => props.violations || [])
 const pageElements = computed(() => props.elements || [])
+const pageCollationMatches = computed(() => props.collationMatches || [])
 
 const typeSettingX = computed(() => {
   if (!props.template) return 0
@@ -380,6 +395,56 @@ function getElementConfig(element: PageElement) {
     cursor: 'pointer',
     name: `element-${element.id}`
   }
+}
+
+function getCollationMatchConfig(match: CollationMatch) {
+  const statusColor = getMatchStatusColor(match.status)
+  const typeColor = getRuleTypeColor(match.type)
+  const opacity = match.status === 'ignored' ? 0.2 : 0.3
+  const strokeOpacity = match.status === 'ignored' ? 0.4 : 1
+
+  let rect = match.rect
+  if (!rect && match.charIndex !== undefined && props.template) {
+    rect = calculateMatchRect(
+      match.charIndex,
+      '',
+      props.template as any
+    )
+    if (!rect) {
+      rect = { x: 10, y: 10, width: 20, height: 24 }
+    }
+  }
+  if (!rect) {
+    rect = { x: 10, y: 10, width: 20, height: 24 }
+  }
+
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+    fill: `rgba(${hexToRgb(typeColor)}, ${opacity})`,
+    stroke: statusColor,
+    strokeWidth: 2,
+    dash: match.status === 'pending' ? [4, 3] : undefined,
+    listening: true,
+    cursor: 'pointer',
+    name: `collation-${match.id}`,
+    perfectDrawEnabled: false,
+    opacity: strokeOpacity
+  }
+}
+
+function hexToRgb(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  if (result) {
+    return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
+  }
+  return '128, 128, 128'
+}
+
+function handleCollationMatchClick(match: CollationMatch) {
+  emit('collationMatchClick', match)
 }
 
 function handleElementClick(element: PageElement) {

@@ -23,6 +23,17 @@
             <n-button size="small" @click="zoomIn">放大</n-button>
             <n-button size="small" @click="zoomOut">缩小</n-button>
             <n-button size="small" @click="resetZoom">重置</n-button>
+            <n-divider vertical style="margin: 0 4px" />
+            <n-button
+              size="small"
+              type="warning"
+              quaternary
+              :disabled="!bookStore.currentBookId"
+              @click="handleQuickCollation"
+            >
+              <template #icon><n-icon><Search /></n-icon></template>
+              校勘扫描
+            </n-button>
           </n-space>
         </div>
         <div class="header-right">
@@ -74,6 +85,9 @@
             <n-tab-pane name="books" tab="书籍管理">
               <BookManager @show-import="handleShowImportFromBook" />
             </n-tab-pane>
+            <n-tab-pane name="rules" tab="规则库">
+              <RuleLibraryPanel />
+            </n-tab-pane>
           </n-tabs>
         </aside>
 
@@ -88,6 +102,12 @@
             </n-tab-pane>
             <n-tab-pane name="validation" tab="版式校验">
               <ViolationPanel />
+            </n-tab-pane>
+            <n-tab-pane name="collation" tab="古籍校勘">
+              <CollationPanel />
+            </n-tab-pane>
+            <n-tab-pane name="history" tab="校勘历史">
+              <CollationHistoryPanel />
             </n-tab-pane>
           </n-tabs>
         </aside>
@@ -111,13 +131,16 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import {
-  NConfigProvider, NButton, NSpace, NDropdown, NIcon, useMessage, NTabPane, NTabs
+  NConfigProvider, NButton, NSpace, NDropdown, NIcon, useMessage, NTabPane, NTabs,
+  NDivider
 } from 'naive-ui'
-import { ChevronDown, CloudUpload, GitCompare } from '@vicons/ionicons5'
+import { ChevronDown, CloudUpload, GitCompare, Search, Book } from '@vicons/ionicons5'
 import { useTemplateStore } from '@/stores/template'
 import { useCanvasStore } from '@/stores/canvas'
 import { useBookStore } from '@/stores/book'
 import { useTemplateVersionStore } from '@/stores/template-version'
+import { useCollationRuleStore } from '@/stores/collation-rules'
+import { useCollationHistoryStore } from '@/stores/collation-history'
 import TemplateList from '@/components/TemplateList.vue'
 import PropertyPanel from '@/components/PropertyPanel.vue'
 import CanvasView from '@/components/CanvasView.vue'
@@ -127,12 +150,17 @@ import BookManager from '@/components/BookManager.vue'
 import ViolationPanel from '@/components/ViolationPanel.vue'
 import TemplateCompare from '@/components/TemplateCompare.vue'
 import ImportDialog from '@/components/ImportDialog.vue'
+import RuleLibraryPanel from '@/components/RuleLibraryPanel.vue'
+import CollationPanel from '@/components/CollationPanel.vue'
+import CollationHistoryPanel from '@/components/CollationHistoryPanel.vue'
 import type { PageTemplate } from '@/types'
 
 const templateStore = useTemplateStore()
 const canvasStore = useCanvasStore()
 const bookStore = useBookStore()
 const versionStore = useTemplateVersionStore()
+const collationRuleStore = useCollationRuleStore()
+const collationHistoryStore = useCollationHistoryStore()
 const message = useMessage()
 
 const showDoublePage = ref(false)
@@ -148,6 +176,11 @@ const menuOptions = [
   { label: '保存版式版本', key: 'save-version' },
   { label: '导入版式', key: 'import' },
   { label: '新建书籍', key: 'new-book' },
+  { type: 'divider' as const, key: 'divider1' },
+  { label: '全书校勘扫描', key: 'scan-book' },
+  { label: '当前章节校勘', key: 'scan-chapter' },
+  { label: '清空校勘结果', key: 'clear-collation' },
+  { type: 'divider' as const, key: 'divider2' },
   { label: '清空辅助线', key: 'clear-guides' }
 ]
 
@@ -195,6 +228,43 @@ function handleRestoreTemplate(tpl: PageTemplate) {
   message.success('已恢复到指定版本')
 }
 
+async function runCollationScan(scope: 'book' | 'chapter') {
+  if (!bookStore.currentBookId) {
+    message.warning('请先创建或选择一本书籍')
+    return
+  }
+  if (scope === 'chapter' && !bookStore.currentChapterId) {
+    message.warning('请先选择章节')
+    return
+  }
+
+  const { buildRulesForScan } = await import('@/utils/collation')
+  const rules = buildRulesForScan(collationRuleStore.allRules)
+  let chapterIds: string[] | undefined
+
+  if (scope === 'chapter') {
+    chapterIds = [bookStore.currentChapterId!]
+  }
+
+  const matches = bookStore.runBookCollation(bookStore.currentBookId, chapterIds, rules)
+
+  if (bookStore.currentBook) {
+    const historyChapterIds = chapterIds || bookStore.currentBook.chapters.map(c => c.id)
+    collationHistoryStore.createHistory(
+      bookStore.currentBookId,
+      bookStore.currentBook.title,
+      historyChapterIds,
+      matches
+    )
+  }
+
+  message.success(`扫描完成，共发现 ${matches.length} 处疑似字词`)
+}
+
+function handleQuickCollation() {
+  runCollationScan('book')
+}
+
 function handleMenuSelect(key: string) {
   switch (key) {
     case 'new':
@@ -215,6 +285,20 @@ function handleMenuSelect(key: string) {
     case 'new-book':
       bookStore.createBook()
       message.success('已创建新书籍')
+      break
+    case 'scan-book':
+      runCollationScan('book')
+      break
+    case 'scan-chapter':
+      runCollationScan('chapter')
+      break
+    case 'clear-collation':
+      if (!bookStore.currentBookId) {
+        message.warning('请先选择书籍')
+        return
+      }
+      bookStore.clearBookCollation(bookStore.currentBookId)
+      message.success('校勘结果已清空')
       break
     case 'clear-guides':
       canvasStore.clearGuides()

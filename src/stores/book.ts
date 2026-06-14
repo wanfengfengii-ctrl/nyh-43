@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Book, Chapter, BookPage, PageElement, PageSide } from '@/types'
+import type { Book, Chapter, BookPage, PageElement, PageSide, CollationMatch } from '@/types'
 import { generateId } from '@/utils/validation'
 import { paginateContent } from '@/utils/pagination'
 import { validatePage } from '@/utils/validation'
+import { scanTextForCollation } from '@/utils/collation'
 
 function createEmptyBook(): Book {
   const now = Date.now()
@@ -47,7 +48,8 @@ function createEmptyPage(
     templateId,
     elements: [],
     violations: [],
-    content: ''
+    content: '',
+    collationMatches: []
   }
 }
 
@@ -443,6 +445,116 @@ export const useBookStore = defineStore('book', () => {
     return allViolations
   }
 
+  function runPageCollation(pageId: string, rules?: Array<{ originalChar: string; standardChar: string; type: string; source: string; description: string; confidence: number; ruleId: string }>): CollationMatch[] {
+    for (const book of books.value) {
+      for (const chapter of book.chapters) {
+        const page = chapter.pages.find(p => p.id === pageId)
+        if (page) {
+          page.collationMatches = scanTextForCollation(
+            page.content,
+            page.id,
+            chapter.id,
+            rules
+          )
+          return page.collationMatches
+        }
+      }
+    }
+    return []
+  }
+
+  function runChapterCollation(chapterId: string, rules?: Array<{ originalChar: string; standardChar: string; type: string; source: string; description: string; confidence: number; ruleId: string }>): CollationMatch[] {
+    const allMatches: CollationMatch[] = []
+    for (const book of books.value) {
+      const chapter = book.chapters.find(c => c.id === chapterId)
+      if (chapter) {
+        for (const page of chapter.pages) {
+          const matches = scanTextForCollation(
+            page.content,
+            page.id,
+            chapter.id,
+            rules
+          )
+          page.collationMatches = matches
+          allMatches.push(...matches)
+        }
+        return allMatches
+      }
+    }
+    return allMatches
+  }
+
+  function runBookCollation(bookId: string, chapterIds?: string[], rules?: Array<{ originalChar: string; standardChar: string; type: string; source: string; description: string; confidence: number; ruleId: string }>): CollationMatch[] {
+    const book = books.value.find(b => b.id === bookId)
+    if (!book) return []
+    const allMatches: CollationMatch[] = []
+    const chaptersToScan = chapterIds && chapterIds.length > 0
+      ? book.chapters.filter(c => chapterIds.includes(c.id))
+      : book.chapters
+    for (const chapter of chaptersToScan) {
+      for (const page of chapter.pages) {
+        const matches = scanTextForCollation(
+          page.content,
+          page.id,
+          chapter.id,
+          rules
+        )
+        page.collationMatches = matches
+        allMatches.push(...matches)
+      }
+    }
+    return allMatches
+  }
+
+  function updateCollationMatchStatus(matchId: string, status: CollationMatch['status']) {
+    for (const book of books.value) {
+      for (const chapter of book.chapters) {
+        for (const page of chapter.pages) {
+          const match = page.collationMatches.find(m => m.id === matchId)
+          if (match) {
+            match.status = status
+            return
+          }
+        }
+      }
+    }
+  }
+
+  function getBookCollationMatches(bookId: string, statuses?: CollationMatch['status'][], types?: string[]): CollationMatch[] {
+    const book = books.value.find(b => b.id === bookId)
+    if (!book) return []
+    let matches = book.chapters.flatMap(c => c.pages.flatMap(p => p.collationMatches || []))
+    if (statuses && statuses.length > 0) {
+      matches = matches.filter(m => statuses.includes(m.status))
+    }
+    if (types && types.length > 0) {
+      matches = matches.filter(m => types.includes(m.type))
+    }
+    return matches
+  }
+
+  function clearPageCollation(pageId: string) {
+    for (const book of books.value) {
+      for (const chapter of book.chapters) {
+        const page = chapter.pages.find(p => p.id === pageId)
+        if (page) {
+          page.collationMatches = []
+          return
+        }
+      }
+    }
+  }
+
+  function clearBookCollation(bookId: string) {
+    const book = books.value.find(b => b.id === bookId)
+    if (!book) return
+    for (const chapter of book.chapters) {
+      for (const page of chapter.pages) {
+        page.collationMatches = []
+      }
+    }
+  }
+
   return {
     books,
     currentBookId,
@@ -478,7 +590,14 @@ export const useBookStore = defineStore('book', () => {
     removePageElement,
     importManuscriptToChapter,
     runPageValidation,
-    runBookValidation
+    runBookValidation,
+    runPageCollation,
+    runChapterCollation,
+    runBookCollation,
+    updateCollationMatchStatus,
+    getBookCollationMatches,
+    clearPageCollation,
+    clearBookCollation
   }
 }, {
   persist: {
